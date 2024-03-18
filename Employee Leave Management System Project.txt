@@ -1,0 +1,189 @@
+import java.sql.*;
+import java.util.Scanner;
+
+public class ELM {
+
+    public static void main(String[] args) {
+        Connection conn = null;
+        Scanner sc = new Scanner(System.in);
+
+        try {
+            Class.forName("com.mysql.jdbc.Driver");
+            conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/emp_mgmt?characterEncoding=utf8", "root",
+                    "");
+
+            while (true) {
+                System.out.println("Choose an option:");
+                System.out.println("1. Add Employee");
+                System.out.println("2. Grant Leave");
+                System.out.println("3. Display Leave Details");
+                System.out.println("4. Update Leave Details");
+                System.out.println("5. Exit");
+                int option = sc.nextInt();
+                sc.nextLine(); // consume newline
+
+                switch (option) {
+                    case 1:
+                        System.out.print("Enter employee name: ");
+                        String empName = sc.nextLine();
+                        System.out.print("Enter Number Of Leaves Allotted: ");
+                        int leaveBalance = sc.nextInt();
+                        addEmployee(conn, empName, leaveBalance);
+                        break;
+                    case 2:
+                        System.out.print("Enter employee name: ");
+                        String empNameLeave = sc.nextLine();
+                        System.out.print("Enter leave days: ");
+                        int leaveDays = sc.nextInt();
+                        sc.nextLine(); // consume newline
+                        grantLeave(conn, empNameLeave, leaveDays);
+                        break;
+                    case 3:
+                        displayLeaveDetails(conn);
+                        break;
+                    case 5:
+                        System.out.println("Exiting program...");
+                        return;
+                    case 4:
+                        System.out.print("Enter employee name: ");
+                        String empNameUpdate = sc.nextLine();
+                        System.out.print("Enter new leave balance: ");
+                        int newLeaveBalance = sc.nextInt();
+                        sc.nextLine(); // consume newline
+                        updateLeaveBalance(conn, empNameUpdate, newLeaveBalance);
+                        break;
+
+                    default:
+                        System.out.println("Invalid option. Please try again.");
+                }
+            }
+
+        } catch (SQLException se) {
+            se.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (conn != null)
+                    conn.close();
+            } catch (SQLException se) {
+                se.printStackTrace();
+            }
+        }
+    }
+
+    // Method to add a new employee
+    static void addEmployee(Connection con, String name, int leaveBalance) throws SQLException {
+        // Check if the employee already exists
+        String checkSql = "SELECT COUNT(*) AS count FROM employees WHERE name = ?";
+        PreparedStatement checkStmt = con.prepareStatement(checkSql);
+        checkStmt.setString(1, name);
+        ResultSet rs = checkStmt.executeQuery();
+        rs.next();
+        int count = rs.getInt("count");
+        rs.close();
+        checkStmt.close();
+
+        if (count > 0) {
+            System.out.println("Employee with the same name already exists. Please enter a different name.");
+            return;
+        }
+
+        // Insert the employee if the name is unique
+        String sql = "INSERT INTO employees (name, leaveBalance) VALUES (?, ?)";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, name);
+        pstmt.setInt(2, leaveBalance);
+        pstmt.executeUpdate();
+        System.out.println("Employee " + name + " added successfully.");
+        pstmt.close();
+    }
+
+    // Method to grant leave to an employee
+    static void grantLeave(Connection con, String name, int leaveDays) throws SQLException {
+        // Check if the employee exists
+        String checkSql = "SELECT COUNT(*) AS count FROM employees WHERE name = ?";
+        PreparedStatement checkStmt = con.prepareStatement(checkSql);
+        checkStmt.setString(1, name);
+        ResultSet rs = checkStmt.executeQuery();
+        rs.next();
+        int count = rs.getInt("count");
+        rs.close();
+        checkStmt.close();
+
+        if (count == 0) {
+            System.out.println("Employee not found.");
+            return;
+        }
+
+        // Proceed to grant leave if the employee exists
+        String sql = "SELECT leaveBalance FROM employees WHERE name = ?";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setString(1, name);
+        ResultSet resultSet = pstmt.executeQuery();
+        if (resultSet.next()) {
+            int leaveBalance = resultSet.getInt("leaveBalance");
+            if (leaveBalance >= leaveDays) {
+                sql = "UPDATE employees SET leaveBalance = leaveBalance - ? WHERE name = ?";
+                pstmt = con.prepareStatement(sql);
+                pstmt.setInt(1, leaveDays);
+                pstmt.setString(2, name);
+                int rowsAffected = pstmt.executeUpdate();
+                if (rowsAffected > 0) {
+                    System.out.println(leaveDays + " days leave granted to " + name);
+                } else {
+                    System.out.println("Failed to grant leave to " + name);
+                }
+            } else {
+                System.out.println("Insufficient leave balance for " + name);
+            }
+        }
+        resultSet.close();
+        pstmt.close();
+    }
+
+    static void updateLeaveBalance(Connection con, String name, int newLeaveBalance) throws SQLException {
+        // Check if the employee exists
+        String checkSql = "SELECT COUNT(*) AS count FROM employees WHERE name = ?";
+        PreparedStatement checkStmt = con.prepareStatement(checkSql);
+        checkStmt.setString(1, name);
+        ResultSet rs = checkStmt.executeQuery();
+        rs.next();
+        int count = rs.getInt("count");
+        rs.close();
+        checkStmt.close();
+
+        if (count == 0) {
+            System.out.println("Employee not found.");
+            return;
+        }
+
+        // Update the leave balance if the employee exists
+        String sql = "UPDATE employees SET leaveBalance = ? WHERE name = ?";
+        PreparedStatement pstmt = con.prepareStatement(sql);
+        pstmt.setInt(1, newLeaveBalance);
+        pstmt.setString(2, name);
+        int rowsAffected = pstmt.executeUpdate();
+        if (rowsAffected > 0) {
+            System.out.println("Leave balance updated successfully for " + name);
+        } else {
+            System.out.println("Failed to update leave balance for " + name);
+        }
+        pstmt.close();
+    }
+
+    // Method to display leave details of all employees
+    static void displayLeaveDetails(Connection con) throws SQLException {
+        Statement stmt = con.createStatement();
+        String sql = "SELECT * FROM employees";
+        ResultSet rs = stmt.executeQuery(sql);
+        while (rs.next()) {
+            int id = rs.getInt("id");
+            String name = rs.getString("name");
+            int leaveBalance = rs.getInt("leaveBalance");
+            System.out.println("ID: " + id + ", Name: " + name + ", Leave Balance: " + leaveBalance);
+        }
+        rs.close();
+        stmt.close();
+    }
+}
